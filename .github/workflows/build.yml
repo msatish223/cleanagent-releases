@@ -1,0 +1,115 @@
+name: Build CleanAgent
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flask psutil pyinstaller
+
+      - name: Build Windows .exe
+        run: |
+          pyinstaller cleanagent.spec --clean --noconfirm
+
+      - name: Test .exe exists
+        run: |
+          if (Test-Path "dist/CleanAgent.exe") {
+            $size = (Get-Item "dist/CleanAgent.exe").Length / 1MB
+            Write-Output "✅ CleanAgent.exe built successfully ($([math]::Round($size, 1)) MB)"
+          } else {
+            Write-Error "❌ Build failed — CleanAgent.exe not found"
+            exit 1
+          }
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CleanAgent-Windows
+          path: dist/CleanAgent.exe
+          retention-days: 90
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flask psutil pyinstaller
+
+      - name: Build Mac binary
+        run: |
+          pyinstaller cleanagent.spec --clean --noconfirm
+
+      - name: Test binary exists
+        run: |
+          if [ -f "dist/CleanAgent" ]; then
+            SIZE=$(du -h dist/CleanAgent | cut -f1)
+            echo "✅ CleanAgent built successfully ($SIZE)"
+          else
+            echo "❌ Build failed"
+            exit 1
+          fi
+
+      - name: Upload Mac artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CleanAgent-Mac
+          path: dist/CleanAgent
+          retention-days: 90
+
+  # Auto-create GitHub Release when a tag is pushed (e.g. v2.0.0)
+  release:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: CleanAgent-Windows
+          path: ./release
+
+      - name: Download Mac artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: CleanAgent-Mac
+          path: ./release
+
+      - name: Rename artifacts
+        run: |
+          mv ./release/CleanAgent.exe ./release/CleanAgent-Windows.exe
+          mv ./release/CleanAgent ./release/CleanAgent-Mac
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ./release/CleanAgent-Windows.exe
+            ./release/CleanAgent-Mac
+          generate_release_notes: true
+          draft: false
+          prerelease: false

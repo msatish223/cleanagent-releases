@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CleanAgent</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root{--bg:#0a0a0f;--bg2:#111118;--card:#16161f;--card-h:#1c1c28;--bdr:#2a2a3a;--bdr-s:#1f1f2d;--t1:#e8e8f0;--t2:#9090a8;--t3:#5e5e76;--grn:#6ee7b7;--grn-d:#34d399;--grn-g:rgba(110,231,183,.12);--blu:#60a5fa;--amb:#fbbf24;--ros:#fb7185;--red:#ef4444;--purp:#a78bfa}
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh;-webkit-font-smoothing:antialiased}
+        .app{max-width:1100px;margin:0 auto;padding:32px 24px}
+
+        /* Header */
+        .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:36px}
+        .brand{display:flex;align-items:center;gap:12px}
+        .brand-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--grn),var(--grn-d));display:grid;place-items:center;font-size:18px;color:#0a0a0f;font-weight:800}
+        .brand-name{font-size:1.15rem;font-weight:700;letter-spacing:-0.02em}
+        .brand-ver{font-size:.75rem;color:var(--t3);margin-left:8px}
+        .header-right{display:flex;gap:12px;align-items:center}
+        .platform-badge{font-size:.72rem;background:var(--bg2);border:1px solid var(--bdr-s);padding:4px 12px;border-radius:8px;color:var(--t3)}
+
+        /* Banner */
+        .restart-banner{display:none;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:12px;padding:14px 20px;margin-bottom:24px;font-size:.88rem;color:var(--amb);align-items:center;gap:10px}
+        .restart-banner.show{display:flex}
+
+        /* Hero row */
+        .hero-row{display:grid;grid-template-columns:240px 1fr;gap:24px;margin-bottom:28px}
+        .score-card{background:var(--card);border:1px solid var(--bdr-s);border-radius:20px;padding:32px;text-align:center}
+        .score-ring-wrap{position:relative;width:140px;height:140px;margin:0 auto 16px}
+        .score-ring{transform:rotate(-90deg)}
+        .score-ring circle{fill:none;stroke-width:8;cx:70;cy:70;r:60}
+        .ring-bg{stroke:var(--bdr)}.ring-fg{stroke:var(--grn);stroke-linecap:round;stroke-dasharray:377;stroke-dashoffset:377;transition:stroke-dashoffset 1.5s ease}
+        .ring-fg.warn{stroke:var(--amb)}.ring-fg.bad{stroke:var(--red)}
+        .score-num{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:2.2rem;font-weight:700}
+        .score-label{font-size:.85rem;color:var(--t2)}.score-grade{font-size:.9rem;font-weight:600;margin-top:4px}
+        .grade-good{color:var(--grn)}.grade-ok{color:var(--amb)}.grade-bad{color:var(--red)}
+        .metrics-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+        .m-card{background:var(--card);border:1px solid var(--bdr-s);border-radius:14px;padding:20px}
+        .m-card-label{font-size:.78rem;color:var(--t3);font-weight:500;margin-bottom:8px}
+        .m-card-value{font-size:1.5rem;font-weight:700;letter-spacing:-0.02em}
+        .m-card-sub{font-size:.78rem;color:var(--t3);margin-top:4px}
+        .m-bar{height:4px;background:var(--bdr);border-radius:2px;margin-top:10px;overflow:hidden}
+        .m-bar-fill{height:100%;border-radius:2px;transition:width 1s ease}
+        .fill-green{background:var(--grn)}.fill-amber{background:var(--amb)}.fill-red{background:var(--red)}
+
+        /* Scan */
+        .scan-section{text-align:center;margin:36px 0}
+        .scan-btn{background:linear-gradient(135deg,var(--grn),var(--grn-d));color:#0a0a0f;border:none;padding:16px 48px;border-radius:14px;font-size:1.05rem;font-weight:700;cursor:pointer;transition:all .25s;font-family:inherit}
+        .scan-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 30px rgba(110,231,183,.3)}
+        .scan-btn:disabled{opacity:.6;cursor:not-allowed}
+        .progress-wrap{margin-top:20px;display:none}
+        .progress-bar{height:6px;background:var(--bdr);border-radius:3px;overflow:hidden;max-width:400px;margin:0 auto}
+        .progress-fill{height:100%;background:var(--grn);border-radius:3px;transition:width .5s ease;width:0%}
+        .progress-label{font-size:.82rem;color:var(--t2);margin-top:10px}
+
+        /* ── AI INSIGHTS PANEL ───────────────────────── */
+        .ai-panel{display:none;margin:0 0 32px;animation:fadeUp .5s ease forwards}
+        .ai-header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+        .ai-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--purp),var(--blu));display:grid;place-items:center;font-size:16px}
+        .ai-header h2{font-size:1.05rem;font-weight:700}
+        .ai-verdict{font-size:.82rem;color:var(--t2);margin-left:auto;padding:4px 14px;border-radius:100px;border:1px solid var(--bdr-s)}
+        .ai-verdict.needs_attention{border-color:rgba(239,68,68,.3);color:var(--red);background:rgba(239,68,68,.06)}
+        .ai-verdict.fair{border-color:rgba(251,191,36,.3);color:var(--amb);background:rgba(251,191,36,.06)}
+        .ai-verdict.good{border-color:rgba(110,231,183,.3);color:var(--grn);background:rgba(110,231,183,.06)}
+        .ai-verdict.excellent{border-color:rgba(110,231,183,.3);color:var(--grn);background:rgba(110,231,183,.06)}
+        .ai-recs{display:flex;flex-direction:column;gap:10px}
+        .ai-rec{background:var(--card);border:1px solid var(--bdr-s);border-radius:14px;padding:18px 20px;display:grid;grid-template-columns:40px 1fr auto;gap:14px;align-items:start;transition:all .2s}
+        .ai-rec:hover{border-color:var(--bdr);background:var(--card-h)}
+        .ai-rec-icon{font-size:1.5rem;line-height:1}
+        .ai-rec-body h4{font-size:.9rem;font-weight:600;margin-bottom:4px}
+        .ai-rec-body p{font-size:.8rem;color:var(--t2);line-height:1.5}
+        .ai-rec-body .ai-action{font-size:.78rem;color:var(--blu);margin-top:6px;font-weight:500}
+        .ai-rec-meta{text-align:right}
+        .ai-priority{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 8px;border-radius:6px}
+        .ai-priority.critical{background:rgba(239,68,68,.12);color:var(--red)}
+        .ai-priority.high{background:rgba(251,191,36,.12);color:var(--amb)}
+        .ai-priority.medium{background:rgba(96,165,250,.1);color:var(--blu)}
+        .ai-priority.low{background:rgba(110,231,183,.1);color:var(--grn)}
+        .ai-impact{font-size:.72rem;color:var(--t3);margin-top:6px;white-space:nowrap}
+        .ai-fix-badge{font-size:.65rem;background:rgba(110,231,183,.1);color:var(--grn);padding:2px 6px;border-radius:4px;margin-top:4px;display:inline-block}
+
+        /* Results */
+        .results{display:none}
+        .section-title{font-size:1.1rem;font-weight:700;margin:36px 0 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+        .badge{font-size:.72rem;background:var(--grn-g);color:var(--grn);padding:3px 10px;border-radius:100px;font-weight:600}
+        .badge-amb{background:rgba(251,191,36,.12)!important;color:var(--amb)!important}
+        .badge-ros{background:rgba(251,113,133,.12)!important;color:var(--ros)!important}
+        .r-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+        .r-card{background:var(--card);border:1px solid var(--bdr-s);border-radius:14px;padding:22px;transition:all .2s}
+        .r-card:hover{border-color:var(--bdr)}
+        .r-card-icon{font-size:1.8rem;margin-bottom:12px}
+        .r-card h3{font-size:.95rem;font-weight:600;margin-bottom:6px}
+        .r-card .r-val{font-size:1.6rem;font-weight:700;margin-bottom:4px}
+        .r-card .r-sub{font-size:.78rem;color:var(--t3);line-height:1.5}
+        .green{color:var(--grn)}.amber{color:var(--amb)}.rose{color:var(--ros)}.blue{color:var(--blu)}
+        .file-list{background:var(--card);border:1px solid var(--bdr-s);border-radius:14px;overflow:hidden}
+        .file-row{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--bdr-s);font-size:.85rem;transition:background .15s;gap:8px}
+        .file-row:last-child{border-bottom:none}.file-row:hover{background:var(--card-h)}
+        .file-name{color:var(--t1);font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .file-meta{color:var(--t3);font-size:.78rem;white-space:nowrap}
+        .file-size{color:var(--amb);font-weight:600;min-width:80px;text-align:right}
+        .proc-row{display:grid;grid-template-columns:1fr 80px 80px;padding:10px 20px;font-size:.82rem;border-bottom:1px solid var(--bdr-s)}
+        .proc-row.head{color:var(--t3);font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
+        .proc-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+        /* Action buttons */
+        .section-action{font-size:.78rem;padding:6px 14px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-weight:600;transition:all .2s;margin-left:auto}
+        .btn-danger{background:rgba(251,113,133,.12);color:var(--ros)}.btn-danger:hover{background:rgba(251,113,133,.2)}
+        .btn-action{background:rgba(96,165,250,.12);color:var(--blu)}.btn-action:hover{background:rgba(96,165,250,.2)}
+        .btn-action:disabled,.btn-danger:disabled{opacity:.5;cursor:not-allowed}
+        .file-check{width:18px;height:18px;accent-color:var(--grn);cursor:pointer;flex-shrink:0}
+
+        /* Cleanup */
+        .cleanup-section{text-align:center;margin:40px 0;display:none}
+        .cleanup-btn{background:linear-gradient(135deg,var(--blu),#3b82f6);color:white;border:none;padding:14px 40px;border-radius:14px;font-size:1rem;font-weight:700;cursor:pointer;transition:all .25s;font-family:inherit}
+        .cleanup-btn:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 8px 30px rgba(96,165,250,.3)}
+        .cleanup-btn:disabled{opacity:.6;cursor:not-allowed}
+        .cleanup-results{display:none;margin-top:24px;background:var(--card);border:1px solid var(--bdr-s);border-radius:14px;padding:28px;text-align:left;max-width:520px;margin-left:auto;margin-right:auto}
+        .cleanup-total{font-size:2rem;font-weight:700;color:var(--grn);text-align:center;margin-bottom:20px}
+        .cleanup-op{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bdr-s);font-size:.85rem}
+        .cleanup-op:last-child{border-bottom:none}
+        .cleanup-op .op-label{color:var(--t2)}.cleanup-op .op-val{color:var(--grn);font-weight:600}
+        .comparison{display:none;margin-top:20px;background:var(--card);border:1px solid rgba(110,231,183,.15);border-radius:14px;padding:24px;max-width:520px;margin-left:auto;margin-right:auto}
+        .comp-row{display:flex;justify-content:space-between;padding:6px 0;font-size:.88rem}
+        .comp-label{color:var(--t2)}.comp-before{color:var(--t3)}.comp-after{color:var(--grn);font-weight:600}
+        .comp-title{font-size:.9rem;font-weight:700;margin-bottom:12px;text-align:center;color:var(--grn)}
+
+        /* Toast, Modal, etc */
+        .toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--grn);border-radius:12px;padding:14px 20px;font-size:.88rem;color:var(--grn);box-shadow:0 8px 30px rgba(0,0,0,.3);z-index:1000;transform:translateY(100px);opacity:0;transition:all .3s}
+        .toast.show{transform:translateY(0);opacity:1}
+        .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:999;place-items:center}
+        .modal-overlay.show{display:grid}
+        .modal{background:var(--card);border:1px solid var(--bdr);border-radius:20px;padding:36px;max-width:440px;width:90%;text-align:center}
+        .modal h3{font-size:1.2rem;margin-bottom:12px}.modal p{color:var(--t2);font-size:.9rem;line-height:1.6;margin-bottom:28px}
+        .modal-actions{display:flex;gap:12px;justify-content:center}
+        .modal-cancel{background:var(--bg2);color:var(--t2);border:1px solid var(--bdr);padding:10px 24px;border-radius:10px;font-weight:600;cursor:pointer;font-family:inherit;font-size:.9rem}
+        .modal-confirm{background:var(--blu);color:white;border:none;padding:10px 24px;border-radius:10px;font-weight:600;cursor:pointer;font-family:inherit;font-size:.9rem}
+        .modal-danger{background:var(--ros);color:white;border:none;padding:10px 24px;border-radius:10px;font-weight:600;cursor:pointer;font-family:inherit;font-size:.9rem}
+
+        .empty-state{text-align:center;padding:80px 0;color:var(--t3)}
+        .empty-state .icon{font-size:3rem;margin-bottom:16px;opacity:.4}
+        .footer{text-align:center;padding:40px 0 20px;font-size:.78rem;color:var(--t3)}
+        @media(max-width:768px){.hero-row{grid-template-columns:1fr}.r-grid{grid-template-columns:1fr}.metrics-grid{grid-template-columns:1fr}.ai-rec{grid-template-columns:32px 1fr}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+        .fade-up{animation:fadeUp .5s ease forwards}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--bdr);border-top-color:var(--grn);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:8px}
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="header">
+        <div class="brand"><div class="brand-icon">⚡</div><span class="brand-name">CleanAgent</span><span class="brand-ver">v2.0.0</span></div>
+        <div class="header-right"><span class="platform-badge" id="platform-badge">—</span></div>
+    </div>
+    <div class="restart-banner" id="restart-banner">⚠️&nbsp; Your system has been running for <strong id="uptime-days"></strong> days. A restart would free up memory and improve performance.</div>
+
+    <div class="hero-row">
+        <div class="score-card">
+            <div class="score-ring-wrap">
+                <svg class="score-ring" viewBox="0 0 140 140" width="140" height="140"><circle class="ring-bg"/><circle class="ring-fg" id="ring-fg"/></svg>
+                <div class="score-num" id="score-num">—</div>
+            </div>
+            <div class="score-label">Performance Score</div>
+            <div class="score-grade" id="score-grade">Scan to check</div>
+        </div>
+        <div class="metrics-grid">
+            <div class="m-card"><div class="m-card-label">CPU Usage</div><div class="m-card-value" id="cpu-val">—</div><div class="m-bar"><div class="m-bar-fill fill-green" id="cpu-bar" style="width:0%"></div></div></div>
+            <div class="m-card"><div class="m-card-label">Memory</div><div class="m-card-value" id="mem-val">—</div><div class="m-card-sub" id="mem-sub"></div><div class="m-bar"><div class="m-bar-fill fill-green" id="mem-bar" style="width:0%"></div></div></div>
+            <div class="m-card"><div class="m-card-label">Disk</div><div class="m-card-value" id="disk-val">—</div><div class="m-card-sub" id="disk-sub"></div><div class="m-bar"><div class="m-bar-fill fill-green" id="disk-bar" style="width:0%"></div></div></div>
+            <div class="m-card"><div class="m-card-label">System</div><div class="m-card-value" id="os-val" style="font-size:1.1rem">—</div><div class="m-card-sub" id="uptime-val"></div></div>
+        </div>
+    </div>
+
+    <div class="scan-section">
+        <button class="scan-btn" id="scan-btn" onclick="startScan()">🔍 &nbsp;Scan My System</button>
+        <div class="progress-wrap" id="progress-wrap"><div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div><div class="progress-label" id="progress-label">Starting scan...</div></div>
+    </div>
+
+    <!-- AI INSIGHTS PANEL -->
+    <div class="ai-panel" id="ai-panel">
+        <div class="ai-header">
+            <div class="ai-icon">🧠</div>
+            <h2>AI Insights</h2>
+            <span class="ai-verdict" id="ai-verdict"></span>
+        </div>
+        <div class="ai-recs" id="ai-recs"></div>
+    </div>
+
+    <div class="results" id="results">
+        <div class="section-title">Scan Summary</div>
+        <div class="r-grid" id="summary-grid"></div>
+
+        <div class="section-title">Cache Analysis <span class="badge" id="cache-badge"></span></div>
+        <div class="file-list" id="cache-list"></div>
+
+        <div class="section-title">Large Files <span class="badge badge-amb" id="large-badge"></span></div>
+        <div class="file-list" id="large-list"></div>
+
+        <div class="section-title" id="dup-title">Duplicate Files <span class="badge badge-ros" id="dup-badge"></span>
+            <button class="section-action btn-danger" id="dup-del-btn" onclick="confirmDupDelete()" style="display:none">🗑️ Remove All Duplicates</button>
+        </div>
+        <div class="file-list" id="dup-list"></div>
+
+        <div class="section-title" id="dl-title">Downloads Folder <span class="badge" id="dl-badge"></span>
+            <button class="section-action btn-action" id="dl-del-btn" onclick="confirmOldDlDelete()" style="display:none">🧹 Clean Selected</button>
+        </div>
+        <div class="file-list" id="dl-list"></div>
+
+        <div class="section-title">Top Processes</div>
+        <div class="file-list" id="proc-list"></div>
+
+        <div class="cleanup-section" id="cleanup-section">
+            <button class="cleanup-btn" id="cleanup-btn" onclick="confirmCleanup()">🧹 &nbsp;Run Safe Cleanup</button>
+            <p style="font-size:.8rem;color:var(--t3);margin-top:12px">Cleans browser &amp; app caches, old logs, temp files, trash, package caches, and flushes DNS</p>
+            <div class="cleanup-results" id="cleanup-results"></div>
+            <div class="comparison" id="comparison"></div>
+        </div>
+    </div>
+
+    <div class="empty-state" id="empty-state"><div class="icon">🔍</div><p>Click <strong>Scan My System</strong> to analyze your computer</p></div>
+    <div class="footer">CleanAgent v2.0.0 — Running locally on your machine. No data leaves your computer.</div>
+</div>
+
+<!-- Modals -->
+<div class="modal-overlay" id="modal-cleanup">
+    <div class="modal"><h3>🧹 Run Safe Cleanup?</h3>
+    <p>This will clean browser &amp; app caches, system logs older than 7 days, temp files, trash, package caches, and flush DNS. Your files, passwords, and bookmarks are <strong>never touched</strong>.</p>
+    <div class="modal-actions"><button class="modal-cancel" onclick="closeModal('modal-cleanup')">Cancel</button><button class="modal-confirm" onclick="runCleanup()">Yes, clean up</button></div></div>
+</div>
+
+<div class="modal-overlay" id="modal-dup">
+    <div class="modal"><h3>🗑️ Remove Duplicates?</h3>
+    <p>For each duplicate group, the <strong>first copy will be kept</strong> and all other copies will be permanently deleted. This cannot be undone.</p>
+    <div id="dup-preview" style="font-size:.82rem;color:var(--t3);margin-bottom:20px"></div>
+    <div class="modal-actions"><button class="modal-cancel" onclick="closeModal('modal-dup')">Cancel</button><button class="modal-danger" onclick="deleteDuplicates()">Delete Duplicates</button></div></div>
+</div>
+
+<div class="modal-overlay" id="modal-dl">
+    <div class="modal"><h3>🧹 Delete Old Downloads?</h3>
+    <p>This will permanently delete the <strong id="dl-count">0</strong> selected files from your Downloads folder. This cannot be undone.</p>
+    <div class="modal-actions"><button class="modal-cancel" onclick="closeModal('modal-dl')">Cancel</button><button class="modal-danger" onclick="deleteOldDownloads()">Delete Selected</button></div></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let scanning=false, pollTimer=null, scanData=null;
+
+// ── Load live metrics ──────────────────────
+async function loadMetrics(){
+    try{
+        const m=await(await fetch('/api/metrics')).json();
+        if(m.error) return;
+        updateUI(m);
+    }catch(e){}
+}
+
+// ── Load platform info ─────────────────────
+async function loadInfo(){
+    try{
+        const info=await(await fetch('/api/info')).json();
+        const p=info.platform==='Windows'?'🪟 Windows':(info.platform==='Darwin'?'🍎 macOS':'🐧 Linux');
+        el('platform-badge').textContent=p+' · v'+info.version;
+    }catch(e){}
+}
+
+function updateUI(m){
+    setScore(m.performance_score);
+    el('cpu-val').textContent=m.cpu_usage+'%'; setBar('cpu-bar',m.cpu_usage);
+    el('mem-val').textContent=m.memory_usage+'%'; el('mem-sub').textContent=m.memory_used_gb+' / '+m.memory_total_gb+' GB'; setBar('mem-bar',m.memory_usage);
+    el('disk-val').textContent=m.disk_usage+'%'; el('disk-sub').textContent=m.disk_free_gb+' GB free of '+m.disk_total_gb+' GB'; setBar('disk-bar',m.disk_usage);
+    const osName=m.os_name==='Darwin'?'macOS':(m.os_name==='Windows'?'Windows':m.os_name);
+    el('os-val').textContent=osName;
+    el('uptime-val').textContent='Uptime: '+(m.uptime_days>=1?Math.round(m.uptime_days)+' days':Math.round(m.uptime_hours)+' hrs');
+    if(m.restart_recommended){el('restart-banner').classList.add('show');el('uptime-days').textContent=Math.round(m.uptime_days)}
+}
+
+function setScore(s){
+    const ring=el('ring-fg'),num=el('score-num'),grade=el('score-grade');
+    ring.style.strokeDashoffset=377-(s/100)*377;
+    ring.className.baseVal='ring-fg';
+    if(s<40)ring.classList.add('bad');else if(s<70)ring.classList.add('warn');
+    num.textContent=Math.round(s);
+    if(s>=80){grade.textContent='Excellent';grade.className='score-grade grade-good'}
+    else if(s>=60){grade.textContent='Good';grade.className='score-grade grade-ok'}
+    else if(s>=40){grade.textContent='Fair';grade.className='score-grade grade-ok'}
+    else{grade.textContent='Needs Attention';grade.className='score-grade grade-bad'}
+}
+
+function setBar(id,p){const b=el(id);b.style.width=p+'%';b.className='m-bar-fill '+(p>85?'fill-red':p>70?'fill-amber':'fill-green')}
+
+// ── Scan ───────────────────────────────────
+async function startScan(){
+    if(scanning)return; scanning=true;
+    el('scan-btn').disabled=true; el('scan-btn').innerHTML='<span class="spinner"></span>Scanning...';
+    el('progress-wrap').style.display='block'; el('results').style.display='none'; el('empty-state').style.display='none';
+    el('ai-panel').style.display='none';
+    try{await fetch('/api/scan',{method:'POST'});pollTimer=setInterval(pollProgress,600)}
+    catch(e){resetScanBtn();scanning=false}
+}
+
+async function pollProgress(){
+    try{
+        const p=await(await fetch('/api/scan/progress')).json();
+        el('progress-fill').style.width=p.percent+'%';el('progress-label').textContent=p.stage;
+        if(!p.in_progress&&p.percent>=100){clearInterval(pollTimer);setTimeout(loadResults,500)}
+    }catch(e){clearInterval(pollTimer)}
+}
+
+async function loadResults(){
+    try{
+        const j=await(await fetch('/api/scan/results')).json();
+        if(j.status==='complete'&&j.data){scanData=j.data;render(j.data);renderAI(j.data.ai_advice)}
+    }catch(e){}
+    finally{scanning=false;resetScanBtn();el('progress-wrap').style.display='none'}
+}
+
+function resetScanBtn(){el('scan-btn').disabled=false;el('scan-btn').textContent='🔍  Scan Again'}
+
+// ── Render AI Insights ─────────────────────
+function renderAI(ai){
+    if(!ai||!ai.recommendations||!ai.recommendations.length){el('ai-panel').style.display='none';return}
+    const s=ai.summary||{};
+    const v=el('ai-verdict');
+    v.textContent=s.verdict_text||'';
+    v.className='ai-verdict '+(s.verdict||'');
+
+    el('ai-recs').innerHTML=ai.recommendations.slice(0,6).map((r,i)=>`
+        <div class="ai-rec fade-up" style="animation-delay:${i*0.08}s">
+            <div class="ai-rec-icon">${r.icon||'💡'}</div>
+            <div class="ai-rec-body">
+                <h4>${r.title}</h4>
+                <p>${r.description}</p>
+                <div class="ai-action">→ ${r.action}</div>
+            </div>
+            <div class="ai-rec-meta">
+                <div class="ai-priority ${r.priority}">${r.priority}</div>
+                <div class="ai-impact">${r.impact_label}</div>
+                ${r.auto_fixable?'<div class="ai-fix-badge">Auto-fixable</div>':''}
+            </div>
+        </div>`).join('');
+
+    el('ai-panel').style.display='block';
+}
+
+// ── Render Scan Results ────────────────────
+function render(d){
+    const m=d.metrics; updateUI(m);
+    const rec=d.summary.recoverable_space_mb, iss=d.summary.total_issues;
+    el('summary-grid').innerHTML=`
+        <div class="r-card fade-up"><div class="r-card-icon">🗑️</div><h3>Recoverable Space</h3><div class="r-val amber">${fmtMB(rec)}</div><div class="r-sub">From caches, duplicates, and old downloads</div></div>
+        <div class="r-card fade-up" style="animation-delay:.1s"><div class="r-card-icon">🔍</div><h3>Issues Found</h3><div class="r-val ${iss>3?'rose':iss>0?'amber':'green'}">${iss}</div><div class="r-sub">${iss===0?'Your system looks great!':'Potential optimizations detected'}</div></div>
+        <div class="r-card fade-up" style="animation-delay:.2s"><div class="r-card-icon">📊</div><h3>Score</h3><div class="r-val ${m.performance_score>=70?'green':'amber'}">${m.performance_score}%</div><div class="r-sub">CPU ${m.cpu_usage}% · Mem ${m.memory_usage}% · Disk ${m.disk_usage}%</div></div>`;
+
+    el('cache-badge').textContent=d.caches.total_display||fmtMB(d.caches.total_size_mb);
+    el('cache-list').innerHTML=d.caches.large_caches.length?d.caches.large_caches.map(c=>fileRow(c.name,'',c.size_display)).join(''):emptyRow('No large cache directories found');
+
+    el('large-badge').textContent=d.large_files.length+' files';
+    el('large-list').innerHTML=d.large_files.length?d.large_files.slice(0,10).map(f=>fileRow(f.name,f.location+' · '+f.modified,f.size_display)).join(''):emptyRow('No files over 100 MB found');
+
+    const wt=d.duplicates.reduce((s,x)=>s+x.wasted_mb,0).toFixed(1);
+    el('dup-badge').textContent=d.duplicates.length+' groups · '+wt+' MB wasted';
+    el('dup-del-btn').style.display=d.duplicates.length>0?'inline-block':'none';
+    el('dup-list').innerHTML=d.duplicates.length?d.duplicates.map(x=>`
+        <div class="file-row"><span class="file-name">${x.files[0].name} <span style="color:var(--t3)">(×${x.count})</span>
+        <span style="color:var(--t3);font-size:.75rem;margin-left:8px">keeps: ${x.files[0].location}</span></span>
+        <span class="file-size rose">${x.wasted_display||x.wasted_mb+' MB'}</span></div>`).join(''):emptyRow('No duplicates detected');
+
+    const dl=d.downloads, old=dl.old_files||[];
+    el('dl-badge').textContent=dl.file_count+' files · '+(dl.total_display||dl.total_size_mb+' MB');
+    el('dl-del-btn').style.display=old.length>0?'inline-block':'none';
+    el('dl-list').innerHTML=old.length
+        ?`<div class="file-row" style="color:var(--t3);font-size:.78rem"><input type="checkbox" class="file-check" onchange="toggleAllDl(this)" checked> <span style="margin-left:8px">${old.length} files older than 30 days — select files to delete</span></div>`
+         +old.map(f=>`<div class="file-row"><input type="checkbox" class="file-check dl-check" data-path="${encodeURIComponent(f.path)}" checked>
+         <span class="file-name" style="margin-left:8px">${f.name}</span><span class="file-meta">${f.age_days} days old</span>
+         <span class="file-size">${f.size_display||f.size_mb+' MB'}</span></div>`).join('')
+        :emptyRow('Downloads folder is clean');
+
+    const procs=d.top_processes||[];
+    el('proc-list').innerHTML='<div class="proc-row head"><span>Process</span><span>CPU %</span><span>Mem %</span></div>'
+        +procs.slice(0,10).map(p=>`<div class="proc-row"><span class="proc-name">${p.name}</span>
+        <span class="${p.cpu_percent>50?'rose':p.cpu_percent>20?'amber':''}">${p.cpu_percent}%</span>
+        <span class="${p.memory_percent>30?'amber':''}">${p.memory_percent}%</span></div>`).join('');
+
+    el('results').style.display='block'; el('cleanup-section').style.display='block';
+    el('cleanup-btn').disabled=false; el('cleanup-btn').innerHTML='🧹 &nbsp;Run Safe Cleanup';
+    el('cleanup-results').style.display='none'; el('comparison').style.display='none';
+}
+
+// Helpers
+function el(id){return document.getElementById(id)}
+function fmtMB(mb){return mb>=1024?(mb/1024).toFixed(1)+' GB':mb.toFixed(1)+' MB'}
+function fileRow(n,m,s,sc=''){return`<div class="file-row"><span class="file-name">${n}</span>${m?`<span class="file-meta">${m}</span>`:''}<span class="file-size ${sc}">${s}</span></div>`}
+function emptyRow(msg){return`<div class="file-row"><span class="file-name" style="color:var(--t3)">${msg}</span></div>`}
+function showToast(msg){const t=el('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)}
+function openModal(id){el(id).classList.add('show')}
+function closeModal(id){el(id).classList.remove('show')}
+function toggleAllDl(cb){document.querySelectorAll('.dl-check').forEach(c=>c.checked=cb.checked)}
+
+// ── Safe Cleanup ───────────────────────────
+function confirmCleanup(){openModal('modal-cleanup')}
+
+async function runCleanup(){
+    closeModal('modal-cleanup');
+    const btn=el('cleanup-btn'); btn.disabled=true; btn.innerHTML='<span class="spinner"></span>Cleaning...';
+    try{
+        const j=await(await fetch('/api/cleanup',{method:'POST'})).json();
+        if(j.status==='complete'){
+            const d=j.data, cr=el('cleanup-results');
+            cr.style.display='block';
+            cr.innerHTML=`<div class="cleanup-total">${d.total_space_freed_display||d.total_space_freed_mb+' MB'} freed</div>`
+                +d.operations.map(op=>`<div class="cleanup-op"><span class="op-label">${op.label}</span>
+                <span class="op-val">${op.space_freed>0?(op.space_freed_display||op.space_freed_mb+' MB'):(op.success?'✓':'—')}</span></div>`).join('');
+
+            if(d.comparison){
+                const c=d.comparison, comp=el('comparison');
+                comp.style.display='block';
+                comp.innerHTML=`<div class="comp-title">📊 Before vs After</div>
+                    <div class="comp-row"><span class="comp-label">Disk Free</span><span class="comp-before">${c.disk_before_gb} GB</span><span>→</span><span class="comp-after">${c.disk_after_gb} GB (+${c.disk_recovered_gb} GB)</span></div>
+                    <div class="comp-row"><span class="comp-label">Score</span><span class="comp-before">${c.score_before}%</span><span>→</span><span class="comp-after">${c.score_after}%</span></div>`;
+            }
+            btn.innerHTML='✅ &nbsp;Cleanup Complete';
+            showToast('✅ Cleanup complete! Run another scan to see full results.');
+        }
+    }catch(e){btn.textContent='❌ Cleanup Failed'}
+}
+
+// ── Delete Duplicates ──────────────────────
+function confirmDupDelete(){
+    if(!scanData||!scanData.duplicates.length)return;
+    const total=scanData.duplicates.reduce((s,x)=>s+x.wasted_mb,0);
+    el('dup-preview').textContent=`${scanData.duplicates.length} groups · ~${fmtMB(total)} will be freed`;
+    openModal('modal-dup');
+}
+
+async function deleteDuplicates(){
+    closeModal('modal-dup');
+    el('dup-del-btn').disabled=true; el('dup-del-btn').textContent='Deleting...';
+    try{
+        const j=await(await fetch('/api/cleanup/duplicates',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({groups:scanData.duplicates})})).json();
+        if(j.status==='complete'){
+            showToast(`✅ Deleted ${j.data.deleted} duplicates — ${j.data.space_freed_display} freed`);
+            el('dup-del-btn').textContent='✅ Done'; el('dup-del-btn').disabled=true;
+        }
+    }catch(e){el('dup-del-btn').textContent='❌ Failed'}
+}
+
+// ── Delete Old Downloads ───────────────────
+function confirmOldDlDelete(){
+    const checked=document.querySelectorAll('.dl-check:checked');
+    if(!checked.length){showToast('No files selected');return}
+    el('dl-count').textContent=checked.length;
+    openModal('modal-dl');
+}
+
+async function deleteOldDownloads(){
+    closeModal('modal-dl');
+    const checked=document.querySelectorAll('.dl-check:checked');
+    const paths=[...checked].map(c=>decodeURIComponent(c.dataset.path));
+    el('dl-del-btn').disabled=true; el('dl-del-btn').textContent='Deleting...';
+    try{
+        const j=await(await fetch('/api/cleanup/files',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({paths})})).json();
+        if(j.status==='complete'){
+            showToast(`✅ Deleted ${j.data.deleted} files — ${j.data.space_freed_display} freed`);
+            el('dl-del-btn').textContent='✅ Done'; el('dl-del-btn').disabled=true;
+            checked.forEach(c=>c.closest('.file-row').remove());
+        }
+    }catch(e){el('dl-del-btn').textContent='❌ Failed'}
+}
+
+// Init
+loadMetrics(); loadInfo(); setInterval(loadMetrics,30000);
+</script>
+</body>
+</html>
