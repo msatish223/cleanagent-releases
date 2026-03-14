@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -61,25 +61,40 @@ jobs:
       - name: Build Mac binary
         run: |
           pyinstaller cleanagent.spec --clean --noconfirm
+          chmod +x dist/CleanAgent
 
-      - name: Test binary exists
+      - name: Create .dmg
         run: |
-          if [ -f "dist/CleanAgent" ]; then
-            SIZE=$(du -h dist/CleanAgent | cut -f1)
-            echo "✅ CleanAgent built successfully ($SIZE)"
-          else
-            echo "❌ Build failed"
-            exit 1
-          fi
+          mkdir -p dmg-contents
+          cp dist/CleanAgent dmg-contents/CleanAgent
+          chmod +x dmg-contents/CleanAgent
+
+          cat > dmg-contents/README.txt << 'EOF'
+          CleanAgent v2.0
+
+          To run:
+          1. Drag CleanAgent to your Desktop or Applications folder
+          2. Right-click → Open (first time only, to bypass Gatekeeper)
+          3. Opens in your browser at http://127.0.0.1:5000
+
+          Your data never leaves your computer.
+          EOF
+
+          hdiutil create -volname "CleanAgent" \
+            -srcfolder dmg-contents \
+            -ov -format UDZO \
+            dist/CleanAgent.dmg
+
+          SIZE=$(du -h dist/CleanAgent.dmg | cut -f1)
+          echo "✅ CleanAgent.dmg created ($SIZE)"
 
       - name: Upload Mac artifact
         uses: actions/upload-artifact@v4
         with:
           name: CleanAgent-Mac
-          path: dist/CleanAgent
+          path: dist/CleanAgent.dmg
           retention-days: 90
 
-  # Auto-create GitHub Release when a tag is pushed (e.g. v2.0.0)
   release:
     needs: [build-windows, build-mac]
     runs-on: ubuntu-latest
@@ -99,17 +114,12 @@ jobs:
           name: CleanAgent-Mac
           path: ./release
 
-      - name: Rename artifacts
-        run: |
-          mv ./release/CleanAgent.exe ./release/CleanAgent-Windows.exe
-          mv ./release/CleanAgent ./release/CleanAgent-Mac
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ./release/CleanAgent-Windows.exe
-            ./release/CleanAgent-Mac
+            ./release/CleanAgent.exe
+            ./release/CleanAgent.dmg
           generate_release_notes: true
           draft: false
           prerelease: false
