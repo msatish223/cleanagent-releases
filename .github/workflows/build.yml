@@ -44,7 +44,7 @@ jobs:
           retention-days: 90
 
   build-mac:
-    runs-on: macos-latest
+    runs-on: macos-13    # Intel runner — binary works on BOTH Intel and Apple Silicon (via Rosetta)
     steps:
       - uses: actions/checkout@v4
 
@@ -62,6 +62,8 @@ jobs:
         run: |
           pyinstaller cleanagent.spec --clean --noconfirm
           chmod +x dist/CleanAgent
+          echo "Architecture:"
+          file dist/CleanAgent
 
       - name: Create .dmg
         run: |
