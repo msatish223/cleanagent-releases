@@ -1,34 +1,27 @@
 name: Build CleanAgent
-
 on:
   push:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install flask psutil pyinstaller
-
       - name: Build Windows .exe
         run: |
           pyinstaller cleanagent.spec --clean --noconfirm
-
       - name: Test .exe exists
         run: |
           if (Test-Path "dist/CleanAgent.exe") {
@@ -38,7 +31,6 @@ jobs:
             Write-Error "Build failed - CleanAgent.exe not found"
             exit 1
           }
-
       - name: Sign .exe with Azure Trusted Signing
         uses: azure/trusted-signing-action@v0
         with:
@@ -53,7 +45,6 @@ jobs:
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
-
       - name: Verify signature
         run: |
           $sig = Get-AuthenticodeSignature "dist/CleanAgent.exe"
@@ -62,37 +53,31 @@ jobs:
           if ($sig.Status -ne "Valid") {
             Write-Warning "Signature is not valid - check signing configuration"
           }
-
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: CleanAgent-Windows
           path: dist/CleanAgent.exe
           retention-days: 90
-
   build-mac:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Python (x64 for Intel compatibility)
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           architecture: x64
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install flask psutil pyinstaller
-
       - name: Build Mac binary
         run: |
           pyinstaller cleanagent.spec --clean --noconfirm
           chmod +x dist/CleanAgent
           echo "Binary architecture:"
           file dist/CleanAgent
-
       - name: Import Apple certificate
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
@@ -100,11 +85,9 @@ jobs:
         run: |
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -hex 12)
-
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
           echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > $RUNNER_TEMP/certificate.p12
           security import $RUNNER_TEMP/certificate.p12 \
             -P "$APPLE_CERTIFICATE_PASSWORD" \
@@ -112,25 +95,19 @@ jobs:
             -t cert \
             -f pkcs12 \
             -k "$KEYCHAIN_PATH"
-
           security list-keychains -d user -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
           echo "Available signing identities:"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
-
       - name: Create .app bundle
         run: |
           APP_DIR="dist/CleanAgent.app"
           MACOS_DIR="$APP_DIR/Contents/MacOS"
           RESOURCES_DIR="$APP_DIR/Contents/Resources"
-
           mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
-
           # Copy binary into .app bundle
           cp dist/CleanAgent "$MACOS_DIR/CleanAgent"
           chmod +x "$MACOS_DIR/CleanAgent"
-
           # Create Info.plist
           cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -162,59 +139,45 @@ jobs:
           </dict>
           </plist>
           PLIST
-
           echo ".app bundle created:"
           ls -la "$MACOS_DIR/"
           cat "$APP_DIR/Contents/Info.plist"
-
       - name: Codesign the .app bundle
         run: |
           IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
           echo "Signing with: $IDENTITY"
-
           if [ -z "$IDENTITY" ]; then
             echo "ERROR: No Developer ID Application identity found"
             security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db
             exit 1
           fi
-
           # Sign the .app bundle with hardened runtime
           codesign --force --deep --options runtime \
             --sign "$IDENTITY" \
             --timestamp \
-            
             dist/CleanAgent.app
-
           echo "Verifying .app signature:"
           codesign -dv --verbose=4 dist/CleanAgent.app
           codesign --verify --strict dist/CleanAgent.app
           echo "Signature valid!"
-
       - name: Create .dmg from .app
         run: |
           mkdir -p dmg-contents
           cp -R dist/CleanAgent.app dmg-contents/
-
           # Create a symlink to Applications for drag-and-drop install
           ln -s /Applications dmg-contents/Applications
-
           hdiutil create -volname "CleanAgent" \
             -srcfolder dmg-contents \
             -ov -format UDZO \
             "dist/CleanAgent.dmg"
-
           echo "DMG created:"
           ls -lh dist/CleanAgent.dmg
-
       - name: Codesign the DMG
         run: |
           IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
-
           codesign --force --sign "$IDENTITY" --timestamp dist/CleanAgent.dmg
-
           echo "DMG signature:"
           codesign -dv dist/CleanAgent.dmg
-
       - name: Notarize the DMG
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -228,26 +191,21 @@ jobs:
             --team-id "$APPLE_TEAM_ID" \
             --wait \
             --timeout 1800
-
           echo "Stapling notarization ticket..."
           xcrun stapler staple dist/CleanAgent.dmg
-
           echo "Verifying notarization:"
           spctl -a -vvv -t install dist/CleanAgent.dmg
         continue-on-error: true
-
       - name: Clean up keychain
         if: always()
         run: |
           security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
-
       - name: Upload Mac artifact
         uses: actions/upload-artifact@v4
         with:
           name: CleanAgent-Mac
           path: dist/CleanAgent.dmg
           retention-days: 90
-
   release:
     needs: [build-windows, build-mac]
     runs-on: ubuntu-latest
@@ -258,16 +216,13 @@ jobs:
         with:
           name: CleanAgent-Windows
           path: ./release
-
       - name: Download Mac artifact
         uses: actions/download-artifact@v4
         with:
           name: CleanAgent-Mac
           path: ./release
-
       - name: List release files
         run: ls -lh ./release/
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
