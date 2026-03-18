@@ -119,7 +119,55 @@ jobs:
           echo "Available signing identities:"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
-      - name: Codesign the binary
+      - name: Create .app bundle
+        run: |
+          APP_DIR="dist/CleanAgent.app"
+          MACOS_DIR="$APP_DIR/Contents/MacOS"
+          RESOURCES_DIR="$APP_DIR/Contents/Resources"
+
+          mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
+
+          # Copy binary into .app bundle
+          cp dist/CleanAgent "$MACOS_DIR/CleanAgent"
+          chmod +x "$MACOS_DIR/CleanAgent"
+
+          # Create Info.plist
+          cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key>
+            <string>CleanAgent</string>
+            <key>CFBundleDisplayName</key>
+            <string>CleanAgent</string>
+            <key>CFBundleIdentifier</key>
+            <string>io.cleanagent.app</string>
+            <key>CFBundleVersion</key>
+            <string>2.3</string>
+            <key>CFBundleShortVersionString</key>
+            <string>2.3</string>
+            <key>CFBundleExecutable</key>
+            <string>CleanAgent</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleSignature</key>
+            <string>????</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>10.15</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+            <key>LSUIElement</key>
+            <false/>
+          </dict>
+          </plist>
+          PLIST
+
+          echo ".app bundle created:"
+          ls -la "$MACOS_DIR/"
+          cat "$APP_DIR/Contents/Info.plist"
+
+      - name: Codesign the .app bundle
         run: |
           IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
           echo "Signing with: $IDENTITY"
@@ -130,28 +178,25 @@ jobs:
             exit 1
           fi
 
-          codesign --force --options runtime \
+          # Sign the .app bundle with hardened runtime
+          codesign --force --deep --options runtime \
             --sign "$IDENTITY" \
             --timestamp \
-            dist/CleanAgent
+            --entitlements /dev/null \
+            dist/CleanAgent.app
 
-          echo "Verifying signature:"
-          codesign -dv --verbose=4 dist/CleanAgent
+          echo "Verifying .app signature:"
+          codesign -dv --verbose=4 dist/CleanAgent.app
+          codesign --verify --strict dist/CleanAgent.app
+          echo "Signature valid!"
 
-      - name: Create .dmg
+      - name: Create .dmg from .app
         run: |
           mkdir -p dmg-contents
-          cp dist/CleanAgent dmg-contents/CleanAgent
-          chmod +x dmg-contents/CleanAgent
+          cp -R dist/CleanAgent.app dmg-contents/
 
-          cat > dmg-contents/README.txt << 'EOF'
-          CleanAgent v2.0
-
-          To run:
-          1. Drag CleanAgent to your Desktop or Applications folder
-          2. Double-click to launch
-          3. Your browser will open the dashboard automatically
-          EOF
+          # Create a symlink to Applications for drag-and-drop install
+          ln -s /Applications dmg-contents/Applications
 
           hdiutil create -volname "CleanAgent" \
             -srcfolder dmg-contents \
@@ -170,8 +215,7 @@ jobs:
           echo "DMG signature:"
           codesign -dv dist/CleanAgent.dmg
 
-      - name: Notarize the DMG (optional)
-        continue-on-error: true
+      - name: Notarize the DMG
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -190,6 +234,7 @@ jobs:
 
           echo "Verifying notarization:"
           spctl -a -vvv -t install dist/CleanAgent.dmg
+        continue-on-error: true
 
       - name: Clean up keychain
         if: always()
