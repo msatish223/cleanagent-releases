@@ -182,7 +182,7 @@ jobs:
           codesign --force --deep --options runtime \
             --sign "$IDENTITY" \
             --timestamp \
-            --entitlements /dev/null \
+            
             dist/CleanAgent.app
 
           echo "Verifying .app signature:"
