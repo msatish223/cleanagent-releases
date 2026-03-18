@@ -170,7 +170,8 @@ jobs:
           echo "DMG signature:"
           codesign -dv dist/CleanAgent.dmg
 
-      - name: Notarize the DMG
+      - name: Notarize the DMG (optional)
+        continue-on-error: true
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
