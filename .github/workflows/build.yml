@@ -182,7 +182,7 @@ jobs:
             --password "$APPLE_APP_SPECIFIC_PASSWORD" \
             --team-id "$APPLE_TEAM_ID" \
             --wait \
-            --timeout 600
+            --timeout 1800
 
           echo "Stapling notarization ticket..."
           xcrun stapler staple dist/CleanAgent.dmg
