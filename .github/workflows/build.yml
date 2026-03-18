@@ -6,6 +6,9 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -30,10 +33,34 @@ jobs:
         run: |
           if (Test-Path "dist/CleanAgent.exe") {
             $size = (Get-Item "dist/CleanAgent.exe").Length / 1MB
-            Write-Output "✅ CleanAgent.exe built successfully ($([math]::Round($size, 1)) MB)"
+            Write-Output "CleanAgent.exe built successfully ($([math]::Round($size, 1)) MB)"
           } else {
-            Write-Error "❌ Build failed — CleanAgent.exe not found"
+            Write-Error "Build failed - CleanAgent.exe not found"
             exit 1
+          }
+
+      - name: Sign .exe with Azure Trusted Signing
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.SIGNING_ENDPOINT }}
+          trusted-signing-account-name: satish
+          certificate-profile-name: cleanagent-signing
+          files-folder: ${{ github.workspace }}\dist
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Verify signature
+        run: |
+          $sig = Get-AuthenticodeSignature "dist/CleanAgent.exe"
+          Write-Output "Signature status: $($sig.Status)"
+          Write-Output "Signer: $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne "Valid") {
+            Write-Warning "Signature is not valid - check signing configuration"
           }
 
       - name: Upload Windows artifact
@@ -77,19 +104,20 @@ jobs:
 
           To run:
           1. Drag CleanAgent to your Desktop or Applications folder
-          2. Right-click → Open (first time only, to bypass Gatekeeper)
-          3. Opens in your browser at http://127.0.0.1:5000
+          2. Double-click to launch
+          3. Your browser will open the dashboard automatically
 
-          Your data never leaves your computer.
+          If macOS blocks the app:
+          - Right-click CleanAgent > Open > Open
           EOF
 
           hdiutil create -volname "CleanAgent" \
             -srcfolder dmg-contents \
             -ov -format UDZO \
-            dist/CleanAgent.dmg
+            "dist/CleanAgent.dmg"
 
-          SIZE=$(du -h dist/CleanAgent.dmg | cut -f1)
-          echo "✅ CleanAgent.dmg created ($SIZE)"
+          echo "DMG created:"
+          ls -lh dist/CleanAgent.dmg
 
       - name: Upload Mac artifact
         uses: actions/upload-artifact@v4
@@ -102,8 +130,6 @@ jobs:
     needs: [build-windows, build-mac]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
     steps:
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
@@ -117,6 +143,9 @@ jobs:
           name: CleanAgent-Mac
           path: ./release
 
+      - name: List release files
+        run: ls -lh ./release/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -124,5 +153,3 @@ jobs:
             ./release/CleanAgent.exe
             ./release/CleanAgent.dmg
           generate_release_notes: true
-          draft: false
-          prerelease: false
