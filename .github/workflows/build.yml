@@ -159,12 +159,14 @@ jobs:
           codesign --force --options runtime \
             --sign "$IDENTITY" \
             --timestamp \
+            --entitlements entitlements.plist \
             dist/CleanAgent.app/Contents/MacOS/CleanAgent
 
           # Then sign the .app bundle
           codesign --force --options runtime \
             --sign "$IDENTITY" \
             --timestamp \
+            --entitlements entitlements.plist \
             dist/CleanAgent.app
           echo "Verifying .app signature:"
           codesign -dv --verbose=4 dist/CleanAgent.app
