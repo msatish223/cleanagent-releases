@@ -93,6 +93,51 @@ jobs:
           echo "Binary architecture:"
           file dist/CleanAgent
 
+      - name: Import Apple certificate
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 12)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "Available signing identities:"
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+      - name: Codesign the binary
+        run: |
+          IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          echo "Signing with: $IDENTITY"
+
+          if [ -z "$IDENTITY" ]; then
+            echo "ERROR: No Developer ID Application identity found"
+            security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db
+            exit 1
+          fi
+
+          codesign --force --options runtime \
+            --sign "$IDENTITY" \
+            --timestamp \
+            dist/CleanAgent
+
+          echo "Verifying signature:"
+          codesign -dv --verbose=4 dist/CleanAgent
+
       - name: Create .dmg
         run: |
           mkdir -p dmg-contents
@@ -106,9 +151,6 @@ jobs:
           1. Drag CleanAgent to your Desktop or Applications folder
           2. Double-click to launch
           3. Your browser will open the dashboard automatically
-
-          If macOS blocks the app:
-          - Right-click CleanAgent > Open > Open
           EOF
 
           hdiutil create -volname "CleanAgent" \
@@ -118,6 +160,40 @@ jobs:
 
           echo "DMG created:"
           ls -lh dist/CleanAgent.dmg
+
+      - name: Codesign the DMG
+        run: |
+          IDENTITY=$(security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+
+          codesign --force --sign "$IDENTITY" --timestamp dist/CleanAgent.dmg
+
+          echo "DMG signature:"
+          codesign -dv dist/CleanAgent.dmg
+
+      - name: Notarize the DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          echo "Submitting for notarization..."
+          xcrun notarytool submit dist/CleanAgent.dmg \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait \
+            --timeout 600
+
+          echo "Stapling notarization ticket..."
+          xcrun stapler staple dist/CleanAgent.dmg
+
+          echo "Verifying notarization:"
+          spctl -a -vvv -t install dist/CleanAgent.dmg
+
+      - name: Clean up keychain
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
 
       - name: Upload Mac artifact
         uses: actions/upload-artifact@v4
