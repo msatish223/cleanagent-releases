@@ -151,8 +151,14 @@ jobs:
             security find-identity -v -p codesigning $RUNNER_TEMP/app-signing.keychain-db
             exit 1
           fi
-          # Sign the .app bundle with hardened runtime
-          codesign --force --deep --options runtime \
+          # Sign the inner binary first (inside-out signing)
+          codesign --force --options runtime \
+            --sign "$IDENTITY" \
+            --timestamp \
+            dist/CleanAgent.app/Contents/MacOS/CleanAgent
+
+          # Then sign the .app bundle
+          codesign --force --options runtime \
             --sign "$IDENTITY" \
             --timestamp \
             dist/CleanAgent.app
