@@ -63,7 +63,7 @@ jobs:
   # CORRECTED MAC BUILD — fixes keychain setup for CI codesigning
   # ═══════════════════════════════════════════════════════════════
   build-mac:
-    runs-on: macos-13
+    runs-on: macos-14
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
