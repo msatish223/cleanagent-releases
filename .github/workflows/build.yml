@@ -269,6 +269,63 @@ jobs:
           echo "=== DMG signature ==="
           codesign -dv dist/CleanAgent.dmg 2>&1
 
+      - name: Verify and fix DMG contents
+        run: |
+          echo "=== Mounting DMG to inspect ==="
+          hdiutil attach dist/CleanAgent.dmg -mountpoint /tmp/dmg-verify -nobrowse
+          echo "=== DMG root contents ==="
+          ls -lahR /tmp/dmg-verify/ | head -60
+          
+          echo "=== Checking signatures of all files ==="
+          find /tmp/dmg-verify -type f | while read f; do
+            echo "--- $f ---"
+            codesign -dv "$f" 2>&1 || echo "  (not signed or not a Mach-O)"
+          done
+          
+          hdiutil detach /tmp/dmg-verify
+          
+          echo "=== Recreating DMG with properly signed contents ==="
+          rm -rf /tmp/dmg-rebuild
+          mkdir -p /tmp/dmg-rebuild
+          
+          # Extract DMG contents
+          hdiutil attach dist/CleanAgent.dmg -mountpoint /tmp/dmg-extract -nobrowse
+          cp -R /tmp/dmg-extract/* /tmp/dmg-rebuild/ 2>/dev/null || true
+          cp -R /tmp/dmg-extract/.* /tmp/dmg-rebuild/ 2>/dev/null || true
+          hdiutil detach /tmp/dmg-extract
+          
+          # Sign EVERY Mach-O binary in the extracted contents
+          find /tmp/dmg-rebuild -type f | while read f; do
+            file "$f" | grep -q "Mach-O" && {
+              echo "Signing: $f"
+              codesign --force --sign "$CODESIGN_IDENTITY"                 --keychain "$KEYCHAIN_PATH"                 --options runtime                 --entitlements entitlements.plist                 --timestamp                 "$f"
+            }
+          done
+          
+          # Also sign any .app bundles
+          find /tmp/dmg-rebuild -name "*.app" -type d | while read app; do
+            echo "Signing app bundle: $app"
+            codesign --force --deep --sign "$CODESIGN_IDENTITY"               --keychain "$KEYCHAIN_PATH"               --options runtime               --entitlements entitlements.plist               --timestamp               "$app"
+          done
+          
+          # Rebuild the DMG
+          rm dist/CleanAgent.dmg
+          hdiutil create -volname "CleanAgent"             -srcfolder /tmp/dmg-rebuild             -ov -format UDZO             dist/CleanAgent.dmg
+          
+          # Sign the DMG itself
+          codesign --force --sign "$CODESIGN_IDENTITY"             --keychain "$KEYCHAIN_PATH"             --timestamp             dist/CleanAgent.dmg
+          
+          # Final verification
+          hdiutil attach dist/CleanAgent.dmg -mountpoint /tmp/dmg-final -nobrowse
+          echo "=== Final DMG contents and signatures ==="
+          find /tmp/dmg-final -type f | while read f; do
+            file "$f" | grep -q "Mach-O" && {
+              echo "--- $f ---"
+              codesign -dv --verbose=2 "$f" 2>&1
+            }
+          done
+          hdiutil detach /tmp/dmg-final
+
       - name: Notarize the DMG
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
