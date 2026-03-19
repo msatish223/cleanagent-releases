@@ -235,26 +235,7 @@ jobs:
             mkdir -p dmg-contents/CleanAgent.app/Contents/MacOS
             mkdir -p dmg-contents/CleanAgent.app/Contents/Resources
             cp -R dist/CleanAgent/* dmg-contents/CleanAgent.app/Contents/MacOS/
-            cat > dmg-contents/CleanAgent.app/Contents/Info.plist << 'INFOPLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleIdentifier</key>
-  <string>io.cleanagent.app</string>
-  <key>CFBundleName</key>
-  <string>CleanAgent</string>
-  <key>CFBundleExecutable</key>
-  <string>CleanAgent</string>
-  <key>CFBundleVersion</key>
-  <string>2.5</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>10.13</string>
-</dict>
-</plist>
-INFOPLIST
+            printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' '<plist version="1.0">' '<dict>' '  <key>CFBundleIdentifier</key>' '  <string>io.cleanagent.app</string>' '  <key>CFBundleName</key>' '  <string>CleanAgent</string>' '  <key>CFBundleExecutable</key>' '  <string>CleanAgent</string>' '  <key>CFBundleVersion</key>' '  <string>2.5</string>' '  <key>CFBundlePackageType</key>' '  <string>APPL</string>' '  <key>LSMinimumSystemVersion</key>' '  <string>10.13</string>' '</dict>' '</plist>' > dmg-contents/CleanAgent.app/Contents/Info.plist
             ln -s /Applications dmg-contents/Applications
 
             # Re-sign the manually created .app
