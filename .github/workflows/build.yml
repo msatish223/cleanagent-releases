@@ -101,11 +101,14 @@ jobs:
           pyinstaller --name CleanAgent \
             --windowed \
             --onedir \
+            --osx-bundle-identifier io.cleanagent.app \
             --clean \
             app.py
 
-          echo "Build output:"
-          ls -lhR dist/CleanAgent.app/ | head -40
+          echo "=== Full dist/ listing ==="
+          ls -lhR dist/ | head -60
+          echo "=== Checking for .app ==="
+          test -d dist/CleanAgent.app && echo ".app EXISTS" || echo "WARNING: .app NOT FOUND"
 
       - name: Set up keychain and import certificate
         env:
@@ -222,8 +225,50 @@ jobs:
       - name: Create .dmg from .app
         run: |
           mkdir -p dmg-contents
-          cp -R dist/CleanAgent.app dmg-contents/
-          ln -s /Applications dmg-contents/Applications
+
+          if [ -d "dist/CleanAgent.app" ]; then
+            echo "Found .app bundle, using it directly"
+            cp -R dist/CleanAgent.app dmg-contents/
+            ln -s /Applications dmg-contents/Applications
+          else
+            echo "No .app found — creating .app wrapper from dist/CleanAgent/"
+            mkdir -p dmg-contents/CleanAgent.app/Contents/MacOS
+            mkdir -p dmg-contents/CleanAgent.app/Contents/Resources
+            cp -R dist/CleanAgent/* dmg-contents/CleanAgent.app/Contents/MacOS/
+            cat > dmg-contents/CleanAgent.app/Contents/Info.plist << 'INFOPLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key>
+  <string>io.cleanagent.app</string>
+  <key>CFBundleName</key>
+  <string>CleanAgent</string>
+  <key>CFBundleExecutable</key>
+  <string>CleanAgent</string>
+  <key>CFBundleVersion</key>
+  <string>2.5</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>10.13</string>
+</dict>
+</plist>
+INFOPLIST
+            ln -s /Applications dmg-contents/Applications
+
+            # Re-sign the manually created .app
+            find dmg-contents/CleanAgent.app -type f \( -name "*.so" -o -name "*.dylib" \) | while read lib; do
+              codesign --force --sign "$CODESIGN_IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime --timestamp "$lib" 2>&1 || true
+            done
+            find dmg-contents/CleanAgent.app/Contents/MacOS -type f -perm +111 | while read exe; do
+              codesign --force --sign "$CODESIGN_IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime --entitlements entitlements.plist --timestamp "$exe"
+            done
+            codesign --force --deep --sign "$CODESIGN_IDENTITY" --keychain "$KEYCHAIN_PATH" --options runtime --entitlements entitlements.plist --timestamp dmg-contents/CleanAgent.app
+          fi
+
+          echo "=== DMG contents ==="
+          ls -lhR dmg-contents/
 
           hdiutil create -volname "CleanAgent" \
             -srcfolder dmg-contents \
