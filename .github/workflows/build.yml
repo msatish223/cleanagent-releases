@@ -96,6 +96,7 @@ jobs:
             -f pkcs12 \
             -k "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           # Download and install Apple Developer ID intermediate certificate
           curl -o $RUNNER_TEMP/DeveloperIDG2CA.cer https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
@@ -169,7 +170,10 @@ jobs:
             --entitlements entitlements.plist \
             dist/CleanAgent.app
           echo "Verifying .app signature:"
-          codesign -dv --verbose=4 dist/CleanAgent.app
+          codesign -dv --verbose=4 dist/CleanAgent.app 2>&1
+          echo "Checking signature authority chain:"
+          codesign -dv --verbose=4 dist/CleanAgent.app 2>&1 | grep Authority || echo "WARNING: No Authority found"
+          codesign -dv --verbose=4 dist/CleanAgent.app/Contents/MacOS/CleanAgent 2>&1 | grep -E '(Authority|Signature)' || echo "WARNING: Inner binary not properly signed"
           codesign --verify --strict dist/CleanAgent.app
           echo "Signature valid!"
       - name: Create .dmg from .app
@@ -190,6 +194,17 @@ jobs:
           codesign --force --sign "$IDENTITY" --timestamp dist/CleanAgent.dmg
           echo "DMG signature:"
           codesign -dv dist/CleanAgent.dmg
+      - name: Verify DMG contents
+        run: |
+          echo "Mounting DMG to verify contents..."
+          hdiutil attach dist/CleanAgent.dmg -mountpoint /tmp/dmg-verify
+          echo "DMG contents:"
+          ls -laR /tmp/dmg-verify/
+          echo "Checking app signature inside DMG:"
+          codesign -dv --verbose=4 /tmp/dmg-verify/CleanAgent.app 2>&1 | grep -E '(Authority|Signature|TeamIdentifier)' || echo "ERROR: App not signed"
+          codesign -dv --verbose=4 /tmp/dmg-verify/CleanAgent.app/Contents/MacOS/CleanAgent 2>&1 | grep -E '(Authority|Signature|TeamIdentifier|Runtime)' || echo "ERROR: Binary not signed"
+          hdiutil detach /tmp/dmg-verify
+
       - name: Notarize the DMG
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
