@@ -102,6 +102,8 @@ jobs:
             --windowed \
             --onedir \
             --osx-bundle-identifier io.cleanagent.app \
+            --add-data "templates:templates" \
+            --add-data "static:static" \
             --clean \
             app.py
 
