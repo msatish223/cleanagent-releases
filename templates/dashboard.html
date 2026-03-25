@@ -80,6 +80,27 @@
         .ai-impact{font-size:.72rem;color:var(--t3);margin-top:6px;white-space:nowrap}
         .ai-fix-badge{font-size:.65rem;background:rgba(110,231,183,.1);color:var(--grn);padding:2px 6px;border-radius:4px;margin-top:4px;display:inline-block}
 
+
+        /* ── Unused Apps ─────────────────────────────── */
+        .app-row{display:grid;grid-template-columns:1fr 100px 100px 90px 80px;align-items:center;padding:14px 20px;border-bottom:1px solid var(--bdr-s);font-size:.85rem;transition:background .15s;gap:12px}
+        .app-row:last-child{border-bottom:none}.app-row:hover{background:var(--card-h)}
+        .app-row .app-name{font-weight:500;color:var(--t1)}.app-row .app-size{color:var(--t2);text-align:right;font-family:'JetBrains Mono',monospace;font-size:.8rem}
+        .app-row .app-date{color:var(--t3);text-align:right;font-size:.8rem}
+        .app-row .app-status{text-align:center}
+        .app-status-badge{font-size:.68rem;font-weight:600;padding:3px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.04em}
+        .app-status-badge.unused{background:rgba(239,68,68,.12);color:var(--red)}
+        .app-status-badge.active{background:rgba(110,231,183,.1);color:var(--grn)}
+        .app-status-badge.unknown{background:rgba(96,165,250,.1);color:var(--blu)}
+        .app-uninstall-btn{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.2);padding:4px 10px;border-radius:6px;font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s}
+        .app-uninstall-btn:hover{background:rgba(239,68,68,.2);border-color:rgba(239,68,68,.4)}
+        .app-uninstall-btn:disabled{opacity:.5;cursor:not-allowed}
+        .app-header{display:grid;grid-template-columns:1fr 100px 100px 90px 80px;padding:10px 20px;font-size:.72rem;color:var(--t3);text-transform:uppercase;letter-spacing:.06em;font-weight:600;border-bottom:1px solid var(--bdr-s);gap:12px}
+        .app-header span:nth-child(2),.app-header span:nth-child(3){text-align:right}
+        .app-header span:nth-child(4){text-align:center}
+        .app-filter-bar{display:flex;gap:10px;margin-bottom:12px}
+        .app-filter-btn{background:var(--card);border:1px solid var(--bdr-s);color:var(--t2);padding:6px 14px;border-radius:8px;font-size:.78rem;cursor:pointer;font-family:inherit;transition:all .2s}
+        .app-filter-btn:hover,.app-filter-btn.active{border-color:var(--grn);color:var(--grn);background:rgba(110,231,183,.06)}
+
         /* Results */
         .results{display:none}
         .section-title{font-size:1.1rem;font-weight:700;margin:36px 0 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -208,7 +229,33 @@
         </div>
         <div class="file-list" id="dl-list"></div>
 
-        <div class="section-title">Top Processes</div>
+        
+        <!-- ── Installed Apps ────────────────────────── -->
+        <div id="apps-section" style="display:none">
+            <div class="section-title">
+                Installed Applications
+                <span class="badge" id="apps-total-badge"></span>
+                <span class="badge badge-ros" id="apps-unused-badge" style="display:none"></span>
+            </div>
+            <div class="app-filter-bar">
+                <button class="app-filter-btn active" onclick="filterApps('all')">All Apps</button>
+                <button class="app-filter-btn" onclick="filterApps('unused')">Unused (6+ months)</button>
+                <button class="app-filter-btn" onclick="filterApps('unknown')">Unknown Status</button>
+                <button class="app-filter-btn" onclick="filterApps('active')">Recently Used</button>
+            </div>
+            <div class="file-list">
+                <div class="app-header">
+                    <span>Application</span>
+                    <span>Size</span>
+                    <span>Last Used</span>
+                    <span>Status</span>
+                    <span></span>
+                </div>
+                <div id="apps-list"></div>
+            </div>
+        </div>
+
+<div class="section-title">Top Processes</div>
         <div class="file-list" id="proc-list"></div>
 
         <div class="cleanup-section" id="cleanup-section">
@@ -384,6 +431,7 @@ function render(d){
         <span class="${p.cpu_percent>50?'rose':p.cpu_percent>20?'amber':''}">${p.cpu_percent}%</span>
         <span class="${p.memory_percent>30?'amber':''}">${p.memory_percent}%</span></div>`).join('');
 
+    renderApps(d);
     el('results').style.display='block'; el('cleanup-section').style.display='block';
     el('cleanup-btn').disabled=false; el('cleanup-btn').innerHTML='🧹 &nbsp;Run Safe Cleanup';
     el('cleanup-results').style.display='none'; el('comparison').style.display='none';
@@ -470,6 +518,74 @@ async function deleteOldDownloads(){
             checked.forEach(c=>c.closest('.file-row').remove());
         }
     }catch(e){el('dl-del-btn').textContent='❌ Failed'}
+}
+
+
+// ── Installed Apps ─────────────────────────
+function renderApps(data){
+    const apps = data.installed_apps || [];
+    if(!apps.length) return;
+    const section = el('apps-section');
+    section.style.display = '';
+    const unused = apps.filter(a => a.is_unused);
+    el('apps-total-badge').textContent = apps.length + ' apps';
+    if(unused.length){
+        el('apps-unused-badge').style.display = '';
+        const totalMB = unused.reduce((s,a)=>s+a.size_mb,0);
+        el('apps-unused-badge').textContent = unused.length + ' unused \u00B7 ' + (totalMB>=1024?(totalMB/1024).toFixed(1)+' GB':Math.round(totalMB)+' MB') + ' wasted';
+    }
+    window._allApps = apps;
+    filterApps('all');
+}
+
+function filterApps(filter){
+    document.querySelectorAll('.app-filter-btn').forEach(b => b.classList.remove('active'));
+    if(event && event.target && event.target.classList) event.target.classList.add('active');
+    const apps = window._allApps || [];
+    let filtered = apps;
+    if(filter === 'unused') filtered = apps.filter(a => a.is_unused);
+    else if(filter === 'unknown') filtered = apps.filter(a => a.is_unknown && !a.is_unused);
+    else if(filter === 'active') filtered = apps.filter(a => !a.is_unused && !a.is_unknown);
+    const list = el('apps-list');
+    if(!filtered.length){
+        list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--t3);font-size:.85rem">No apps in this category</div>';
+        return;
+    }
+    list.innerHTML = filtered.map(a => {
+        let sc = 'active', st = 'Active';
+        if(a.is_unused){ sc = 'unused'; st = 'Unused'; }
+        else if(a.is_unknown){ sc = 'unknown'; st = 'Unknown'; }
+        const lu = a.days_unused > 0 ? a.last_used + ' (' + a.days_unused + 'd)' : a.last_used;
+        const ep = encodeURIComponent(a.path);
+        const en = a.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const rmBtn = (a.is_unused || a.is_unknown) ? '<button class="app-uninstall-btn" onclick="uninstallApp(this,\'' + ep + '\',\'' + en + '\')">Remove</button>' : '';
+        return '<div class="app-row"><div class="app-name">' + a.name + '</div><div class="app-size">' + a.size_display + '</div><div class="app-date">' + lu + '</div><div class="app-status"><span class="app-status-badge ' + sc + '">' + st + '</span></div><div>' + rmBtn + '</div></div>';
+    }).join('');
+}
+
+async function uninstallApp(btn, encodedPath, name){
+    if(!confirm('Move "' + name + '" to Trash?\n\nYou can recover it from Trash if needed.')) return;
+    btn.disabled = true;
+    btn.textContent = 'Removing...';
+    try{
+        const resp = await fetch('/api/uninstall', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ path: decodeURIComponent(encodedPath) })
+        });
+        const j = await resp.json();
+        if(j.status === 'complete'){
+            btn.textContent = '\u2705 Removed';
+            btn.closest('.app-row').style.opacity = '0.4';
+            showToast('\u2705 ' + name + ' moved to Trash \u2014 ' + j.data.space_freed_display + ' freed');
+        } else {
+            btn.textContent = '\u274C Failed';
+            showToast('\u274C ' + (j.error || 'Failed to remove'));
+        }
+    }catch(e){
+        btn.textContent = '\u274C Error';
+        showToast('\u274C Network error');
+    }
 }
 
 // Init

@@ -82,6 +82,12 @@ def start_scan():
                 scan_progress = {"stage": "Analyzing downloads...", "percent": 70}
             downloads = scanner.analyze_downloads()
 
+
+            with _lock:
+                scan_progress = {"stage": "Scanning installed apps...", "percent": 78}
+            installed_apps = scanner.scan_installed_apps()
+            unused_apps = [a for a in installed_apps if a.get("is_unused")]
+
             with _lock:
                 scan_progress = {"stage": "Checking processes & startup...", "percent": 85}
             startup = scanner.get_startup_items()
@@ -98,6 +104,8 @@ def start_scan():
                 "large_files": large_files,
                 "duplicates": duplicates,
                 "downloads": downloads,
+                "installed_apps": installed_apps,
+                "unused_apps": unused_apps,
                 "startup_items": startup,
                 "top_processes": processes,
                 "summary": {
@@ -218,6 +226,24 @@ def cleanup_files():
         log.error(f"File cleanup failed: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+
+
+
+@app.route("/api/uninstall", methods=["POST"])
+def uninstall_app():
+    try:
+        data = request.get_json()
+        app_path = data.get("path", "")
+        if not app_path:
+            return jsonify({"error": "No app path provided"}), 400
+        result = SystemCleaner.uninstall_app(app_path)
+        if result.get("success"):
+            return jsonify({"status": "complete", "data": result})
+        else:
+            return jsonify({"error": result.get("error", "Unknown error")}), 500
+    except Exception as e:
+        log.error(f"Uninstall failed: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/metrics")
 def live_metrics():

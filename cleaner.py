@@ -456,6 +456,44 @@ class SystemCleaner:
             "errors": errors,
         }
 
+
+    @staticmethod
+    def uninstall_app(app_path: str) -> Dict:
+        """Move an app to Trash (Mac) or delete app folder (Windows)."""
+        p = Path(app_path)
+        if not p.exists():
+            return {"success": False, "error": "Not found: " + app_path}
+
+        try:
+            size = sum(
+                f.stat().st_size for f in p.rglob("*") if f.is_file()
+            ) if p.is_dir() else p.stat().st_size
+
+            is_mac = platform.system() == "Darwin"
+            is_win = platform.system() == "Windows"
+
+            if is_mac:
+                osa_cmd = 'tell application "Finder" to delete POSIX file "' + app_path + '"'
+                result = subprocess.run(
+                    ["osascript", "-e", osa_cmd],
+                    capture_output=True, text=True, timeout=15,
+                )
+                if result.returncode != 0:
+                    return {"success": False, "error": result.stderr.strip() or "Move to Trash failed"}
+            elif is_win:
+                shutil.rmtree(p, ignore_errors=True)
+            else:
+                shutil.rmtree(p, ignore_errors=True)
+
+            return {
+                "success": True,
+                "space_freed_bytes": size,
+                "space_freed_display": fmt_size(size),
+                "app_name": p.stem if p.name.endswith(".app") else p.name,
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     @staticmethod
     def delete_duplicates(duplicate_groups: List[Dict]) -> Dict:
         """For each group, keep the first file and delete the rest."""

@@ -449,6 +449,111 @@ class SystemScanner:
 
         return sorted(out, key=lambda x: x["cpu_percent"] + x["memory_percent"], reverse=True)[:limit]
 
+
+    # ── Installed Apps Analysis ──────────────────────────
+    def scan_installed_apps(self) -> List[Dict]:
+        """Scan installed applications with size and last-used date."""
+        apps = []
+
+        if self.is_mac:
+            app_dirs = [Path("/Applications"), self.home / "Applications"]
+            for app_dir in app_dirs:
+                if not app_dir.exists():
+                    continue
+                try:
+                    for item in app_dir.iterdir():
+                        if not item.name.endswith(".app"):
+                            continue
+                        if is_sys_file(item):
+                            continue
+                        try:
+                            size = self._dir_size(item)
+                            if size < 1024 * 1024:
+                                continue
+                            last_used_str = "Unknown"
+                            days_unused = -1
+                            try:
+                                result = subprocess.run(
+                                    ["mdls", "-name", "kMDItemLastUsedDate", "-raw", str(item)],
+                                    capture_output=True, text=True, timeout=5,
+                                )
+                                ds = result.stdout.strip()
+                                if ds and ds != "(null)":
+                                    lu = datetime.strptime(ds[:19], "%Y-%m-%d %H:%M:%S")
+                                    last_used_str = lu.strftime("%Y-%m-%d")
+                                    days_unused = (datetime.now() - lu).days
+                            except Exception:
+                                pass
+                            apps.append({
+                                "name": item.stem,
+                                "path": str(item),
+                                "size_bytes": size,
+                                "size_mb": round(size / 1024**2, 1),
+                                "size_display": fmt_size(size),
+                                "last_used": last_used_str,
+                                "days_unused": days_unused,
+                                "is_unused": days_unused > 180,
+                                "is_unknown": days_unused == -1,
+                            })
+                        except (PermissionError, OSError):
+                            continue
+                except (PermissionError, OSError):
+                    continue
+
+        elif self.is_win:
+            prog_dirs = [
+                Path("C:/Program Files"),
+                Path("C:/Program Files (x86)"),
+                self.home / "AppData" / "Local" / "Programs",
+            ]
+            for prog_dir in prog_dirs:
+                if not prog_dir.exists():
+                    continue
+                try:
+                    for item in prog_dir.iterdir():
+                        if not item.is_dir() or is_sys_file(item):
+                            continue
+                        try:
+                            size = self._dir_size(item)
+                            if size < 5 * 1024 * 1024:
+                                continue
+                            last_used_str = "Unknown"
+                            days_unused = -1
+                            try:
+                                newest = 0
+                                for f in item.rglob("*.exe"):
+                                    st = safe_stat(f)
+                                    if st and st.st_atime > newest:
+                                        newest = st.st_atime
+                                if newest > 0:
+                                    lu = datetime.fromtimestamp(newest)
+                                    last_used_str = lu.strftime("%Y-%m-%d")
+                                    days_unused = (datetime.now() - lu).days
+                            except Exception:
+                                pass
+                            apps.append({
+                                "name": item.name,
+                                "path": str(item),
+                                "size_bytes": size,
+                                "size_mb": round(size / 1024**2, 1),
+                                "size_display": fmt_size(size),
+                                "last_used": last_used_str,
+                                "days_unused": days_unused,
+                                "is_unused": days_unused > 180,
+                                "is_unknown": days_unused == -1,
+                            })
+                        except (PermissionError, OSError):
+                            continue
+                except (PermissionError, OSError):
+                    continue
+
+        apps.sort(key=lambda x: (
+            0 if x["is_unused"] else 1,
+            -x["days_unused"] if x["days_unused"] > 0 else 0,
+            -x["size_bytes"],
+        ))
+        return apps
+
     # ── Helpers ──────────────────────────────────────────
     def _dir_size(self, path: Path) -> int:
         t = 0

@@ -46,6 +46,8 @@ class AIAdvisor:
         self._check_disk(recs, metrics)
         self._check_uptime(recs, metrics)
         self._check_processes(recs, processes)
+        unused_apps = scan_data.get("unused_apps", [])
+        self._check_unused_apps(recs, unused_apps)
 
         recs.sort(key=lambda r: (PRIORITY_ORDER.get(r.priority, 9), -r.impact_score))
 
@@ -130,6 +132,25 @@ class AIAdvisor:
             recs.append(Recommendation("uptime_long", "high", "maintenance", f"No restart in {int(days)} days", "Accumulated memory leaks and bloat.", "Quick boost", 20, "Restart your computer.", False, "🔄"))
         elif days > 7:
             recs.append(Recommendation("uptime_moderate", "medium", "maintenance", f"Consider restart ({int(days)}d uptime)", "Weekly restarts help.", "Moderate", 10, "Restart when convenient.", False, "🔄"))
+
+
+    def _check_unused_apps(self, recs, apps):
+        if not apps:
+            return
+        unused = [a for a in apps if a.get("is_unused")]
+        if not unused:
+            return
+        total_mb = sum(a.get("size_mb", 0) for a in unused)
+        p = "critical" if total_mb > 2000 else ("high" if total_mb > 500 else "medium")
+        recs.append(Recommendation(
+            "unused_apps", p, "storage",
+            f"{len(unused)} unused applications ({total_mb:.0f} MB)",
+            f"Apps not opened in 6+ months. Removing them frees significant disk space.",
+            f"{total_mb:.0f} MB recoverable",
+            min(30, total_mb / 100),
+            "Review and uninstall unused apps.",
+            True, "\U0001f4f1"
+        ))
 
     def _check_processes(self, recs, processes):
         heavy = [p for p in processes if p.get("cpu_percent", 0) > 30]
